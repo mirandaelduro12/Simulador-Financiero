@@ -1,0 +1,46 @@
+// config.js — carga data/categories.json vía fetch/async-await.
+// Nota: al abrir index.html con doble clic (protocolo file://) el navegador
+// bloquea fetch por CORS. Sirve la carpeta con un servidor local, por
+// ejemplo:  npx serve .   o   python -m http.server
+// Si el fetch falla, se usa un fallback embebido para que la app no se rompa.
+
+const FALLBACK = {
+  expenseCategories: [
+    { id: 'alimentacion', label: 'Alimentación', color: '#B23A48' },
+    { id: 'transporte', label: 'Transporte', color: '#C97B3D' },
+    { id: 'vivienda', label: 'Vivienda', color: '#205E5A' },
+    { id: 'servicios', label: 'Servicios', color: '#3A6EA5' },
+    { id: 'educacion', label: 'Educación', color: '#6C4F94' },
+    { id: 'entretenimiento', label: 'Entretenimiento', color: '#B8862E' },
+    { id: 'gustito', label: 'Gustito', color: '#9B6B9E' },
+    { id: 'salud', label: 'Salud', color: '#1F7A5C' },
+    { id: 'tecnologia', label: 'Tecnología', color: '#4A5568' },
+    { id: 'otros', label: 'Otros', color: '#8A8F98' }
+  ],
+  incomeCategories: [
+    { id: 'sueldo', label: 'Sueldo' }, { id: 'freelance', label: 'Freelance' },
+    { id: 'bono', label: 'Bono' }, { id: 'adicional', label: 'Ingreso adicional' },
+    { id: 'otros', label: 'Otros' }
+  ],
+  frequencies: [
+    { id: 'mensual', label: 'Mensual', factor: 1 },
+    { id: 'quincenal', label: 'Quincenal', factor: 2 },
+    { id: 'semanal', label: 'Semanal', factor: 4.33 },
+    { id: 'ocasional', label: 'Ocasional (único)', factor: 0 }
+  ]
+};
+
+let cached = null;
+
+export async function loadConfig() {
+  if (cached) return cached;
+  try {
+    const res = await fetch('./data/categories.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    cached = await res.json();
+  } catch (err) {
+    console.warn('No se pudo cargar data/categories.json vía fetch, usando config embebida.', err);
+    cached = FALLBACK;
+  }
+  return cached;
+}
