@@ -1,7 +1,8 @@
 import { Storage } from '../storage.js';
 import { h, formatCurrency, formatDate, showToast } from '../utils.js';
 import { loadConfig } from '../config.js';
-import { buildTable, selectField, textField, readForm, clearAndRender } from './shared.js';
+import { sumMonthly } from '../calculations.js';
+import { buildTable, selectField, textField, readForm, clearAndRender, addButton, categoryChip, stackedCell, formHead, focusForm } from './shared.js';
 
 export async function renderIncome(outlet) {
   const config = await loadConfig();
@@ -9,29 +10,29 @@ export async function renderIncome(outlet) {
 
   const tableWrap = h('div', {});
   const formWrap = h('div', { class: 'form-panel' });
+  const subEl = h('div', { class: 'card-sub' });
 
   const card = h('div', { class: 'card' }, [
     h('div', { class: 'section-head' }, [
-      h('h3', {}, 'Ingresos registrados'),
-      h('button', {
-        class: 'btn btn-primary', onClick: () => { editingId = null; renderForm(); }
-      }, '+ Nuevo ingreso')
+      h('div', {}, [h('h3', {}, 'Ingresos registrados'), subEl]),
+      addButton('Nuevo ingreso', () => { editingId = null; renderForm(); })
     ]),
-    tableWrap,
-    formWrap
+    formWrap,
+    tableWrap
   ]);
   outlet.appendChild(card);
 
   function renderTable() {
     const records = Storage.getAll('income').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    subEl.textContent = `${records.length} ${records.length === 1 ? 'registro' : 'registros'} · ${formatCurrency(sumMonthly(records))} al mes`;
     clearAndRender(tableWrap, buildTable({
       records,
       columns: [
-        { key: 'description', label: 'Descripción' },
-        { key: 'category', label: 'Categoría', render: r => labelFor(config.incomeCategories, r.category) },
-        { key: 'frequency', label: 'Frecuencia', render: r => labelFor(config.frequencies, r.frequency) },
-        { key: 'date', label: 'Fecha', render: r => formatDate(r.date) },
-        { key: 'amount', label: 'Monto', numeric: true, render: r => formatCurrency(r.amount) }
+        { key: 'description', label: 'Descripción', render: r => stackedCell(r.description) },
+        { key: 'category', label: 'Categoría', render: r => categoryChip(labelFor(config.incomeCategories, r.category)) },
+        { key: 'frequency', label: 'Frecuencia', muted: true, render: r => labelFor(config.frequencies, r.frequency) },
+        { key: 'date', label: 'Fecha', muted: true, render: r => formatDate(r.date) },
+        { key: 'amount', label: 'Monto', numeric: true, render: r => stackedCell(formatCurrency(r.amount), r.frequency === 'ocasional' ? 'ingreso único' : null) }
       ],
       onEdit: (r) => { editingId = r.id; renderForm(r); },
       onDelete: (r) => {
@@ -39,12 +40,13 @@ export async function renderIncome(outlet) {
         showToast('Ingreso eliminado', 'success');
         renderTable();
       },
-      emptyMessage: 'Aún no registras ingresos. Usa "+ Nuevo ingreso" para empezar.'
+      emptyMessage: 'Aún no registras ingresos. Usa "Nuevo ingreso" para empezar.'
     }));
   }
 
   function renderForm(existing) {
     clear(formWrap);
+    formWrap.appendChild(formHead(existing ? 'Editar ingreso' : 'Nuevo ingreso'));
     formWrap.appendChild(h('div', { class: 'form-row' }, [
       textField({ id: 'inc-description', label: 'Descripción', value: existing?.description || '', required: true }),
       selectField({ id: 'inc-category', label: 'Categoría', options: config.incomeCategories, value: existing?.category, required: true }),
@@ -56,8 +58,9 @@ export async function renderIncome(outlet) {
     formWrap.appendChild(errorBox);
     formWrap.appendChild(h('div', { class: 'row' }, [
       h('button', { class: 'btn btn-primary', onClick: () => handleSave(errorBox) }, existing ? 'Guardar cambios' : 'Agregar ingreso'),
-      h('button', { class: 'btn', onClick: () => clear(formWrap) }, 'Cancelar')
+      h('button', { class: 'btn btn-ghost', onClick: () => clear(formWrap) }, 'Cancelar')
     ]));
+    focusForm(formWrap);
   }
 
   function handleSave(errorBox) {

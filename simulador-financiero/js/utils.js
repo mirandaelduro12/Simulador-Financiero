@@ -56,22 +56,23 @@ export function round2(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+// Convierte una clave "2026-09" en una etiqueta corta "set. 26".
+export function formatMonthKey(key) {
+  const [year, month] = String(key).split('-').map(Number);
+  if (!year || !month) return key;
+  return new Date(year, month - 1, 1).toLocaleDateString('es-PE', { month: 'short', year: '2-digit' });
+}
+
 let toastTimeout = null;
 export function showToast(message, tone = 'info') {
   let el = document.getElementById('toast');
   if (!el) {
-    el = h('div', { id: 'toast' });
-    Object.assign(el.style, {
-      position: 'fixed', bottom: '20px', right: '20px', zIndex: 999,
-      padding: '10px 16px', borderRadius: '8px', fontSize: '13.5px',
-      fontFamily: 'Manrope, sans-serif', color: '#fff', transition: 'opacity .2s'
-    });
+    el = h('div', { id: 'toast', role: 'status', 'aria-live': 'polite' });
     document.body.appendChild(el);
   }
-  const colors = { info: '#16213A', success: '#1F7A5C', error: '#B23A48' };
-  el.style.background = colors[tone] || colors.info;
+  el.className = `toast ${tone}`;
   el.textContent = message;
-  el.style.opacity = '1';
+  requestAnimationFrame(() => el.classList.add('show'));
   clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => { el.style.opacity = '0'; }, 2400);
+  toastTimeout = setTimeout(() => { el.classList.remove('show'); }, 2600);
 }

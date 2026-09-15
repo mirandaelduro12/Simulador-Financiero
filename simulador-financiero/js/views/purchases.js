@@ -87,14 +87,13 @@ export function renderPurchases(outlet) {
     ];
     const cheapest = totalCosts.reduce((a, b) => (b.total < a.total ? b : a));
 
-    resultWrap.appendChild(h('div', { class: 'card-title' }, `Impacto de comprar "${product}" por ${formatCurrency(price)}`));
-    resultWrap.appendChild(h('div', { class: 'grid-3' }, options.map((opt, i) =>
-      h('div', { class: 'card' }, [
+    resultWrap.appendChild(h('div', { class: 'section-label' }, `Impacto de comprar "${product}" por ${formatCurrency(price)}`));
+    resultWrap.appendChild(h('div', { class: 'grid-3' }, options.map((opt, i) => {
+      const isBest = (i === 0 && cheapest.key === 'contado') || (i === 1 && cheapest.key === 'ahorro') || (i === 2 && cheapest.key === 'financiado');
+      return h('div', { class: `card option-card ${isBest ? 'is-best' : ''}` }, [
         h('div', { class: 'spread' }, [
           h('h4', {}, opt.title),
-          (i === 0 && cheapest.key === 'contado') || (i === 1 && cheapest.key === 'ahorro') || (i === 2 && cheapest.key === 'financiado')
-            ? h('span', { class: 'tag', style: 'background:var(--positive-soft);color:var(--positive)' }, 'Menor costo')
-            : null
+          isBest ? h('span', { class: 'tag positive' }, 'Menor costo') : null
         ]),
         h('div', { class: 'stack mt-16' }, opt.lines.map(([label, value, good]) =>
           h('div', { class: 'spread' }, [
@@ -102,8 +101,8 @@ export function renderPurchases(outlet) {
             h('span', { class: `mono ${good ? '' : 'diff-down'}` }, value)
           ])
         ))
-      ])
-    )));
+      ]);
+    })));
 
     resultWrap.appendChild(h('p', { class: 'text-faint mt-16' },
       'Comparación basada en tus datos registrados. El financiamiento asume cuota fija (sistema francés) sobre la tasa anual indicada.'));

@@ -1,5 +1,6 @@
 import { Storage } from '../storage.js';
 import { h, showToast } from '../utils.js';
+import { icon } from '../icons.js';
 
 function sampleData() {
   const today = new Date();
@@ -35,25 +36,49 @@ function sampleData() {
 
 export function renderSettings(outlet) {
   const formUrl = window.APP_CONFIG?.googleFormUrl || '';
-  const connectionText = Storage.isOnline()
+  const online = Storage.isOnline();
+  const connectionText = online
     ? 'Conectado: tus cambios se guardan en la API + SQLite.'
     : 'Sin API disponible: la aplicación trabaja con el caché local y sincroniza cuando vuelva a estar disponible.';
-  const card = h('div', { class: 'card stack' }, [
-    h('h3', {}, 'Ajustes y datos'),
-    h('p', { class: 'text-soft' }, connectionText),
-    h('div', { class: 'card sync-card' }, [
-      h('div', { class: 'card-title' }, 'Registro rápido desde celular'),
-      h('p', { class: 'text-soft' }, 'Usa tu Google Form para registrar una compra como “Galleta · S/ 2 · Gustito”. El registro entra por Google Sheets/Apps Script y aparece en el Dashboard.'),
-      formUrl ? h('a', { class: 'btn btn-primary', href: formUrl, target: '_blank', rel: 'noopener' }, 'Abrir Google Form') : h('div', { class: 'field-error' }, 'Configura googleFormUrl en js/app-config.js para mostrar el botón del formulario.'),
-      h('div', { class: 'text-soft mt-16' }, 'API: ' + (window.APP_CONFIG?.apiUrl || '/api'))
+
+  const grid = h('div', { class: 'settings-grid' }, [
+    h('div', { class: 'card' }, [
+      h('div', { class: 'spread' }, [
+        h('h3', {}, 'Conexión'),
+        h('span', { class: `tag ${online ? 'positive' : 'accent'}` }, online ? 'Sincronizado' : 'Modo local')
+      ]),
+      h('p', { class: 'text-soft' }, connectionText),
+      h('div', { class: 'kbd-line' }, 'API: ' + (window.APP_CONFIG?.apiUrl || '/api'))
     ]),
-    h('div', { class: 'row mt-16' }, [
-      h('button', { class: 'btn btn-primary', onClick: loadSample }, 'Cargar datos de ejemplo'),
-      h('button', { class: 'btn', onClick: exportData }, 'Exportar respaldo (JSON)'),
-      h('button', { class: 'btn btn-danger', onClick: wipeData }, 'Borrar todos mis datos')
+
+    h('div', { class: 'card sync-card' }, [
+      h('h3', {}, 'Registro rápido desde celular'),
+      h('p', { class: 'text-soft' }, 'Usa tu Google Form para registrar una compra como “Galleta · S/ 2 · Gustito”. El registro entra por Google Sheets/Apps Script y aparece en el Dashboard.'),
+      formUrl
+        ? h('div', { class: 'row' }, [
+          h('a', { class: 'btn btn-primary', href: formUrl, target: '_blank', rel: 'noopener' }, [h('span', { html: icon('external', 15) }), 'Abrir Google Form'])
+        ])
+        : h('div', { class: 'kbd-line' }, 'Configura googleFormUrl en js/app-config.js para mostrar el botón del formulario.')
+    ]),
+
+    h('div', { class: 'card' }, [
+      h('h3', {}, 'Tus datos'),
+      h('p', { class: 'text-soft' }, 'Carga datos de ejemplo para explorar la app o descarga un respaldo en JSON.'),
+      h('div', { class: 'row' }, [
+        h('button', { class: 'btn btn-primary', onClick: loadSample }, 'Cargar datos de ejemplo'),
+        h('button', { class: 'btn', onClick: exportData }, [h('span', { html: icon('download', 15) }), 'Exportar respaldo (JSON)'])
+      ])
+    ]),
+
+    h('div', { class: 'card danger-zone' }, [
+      h('h3', {}, 'Zona de riesgo'),
+      h('p', { class: 'text-soft' }, 'Borra todos los ingresos, gastos, deudas y objetivos guardados. No se puede deshacer.'),
+      h('div', { class: 'row' }, [
+        h('button', { class: 'btn btn-danger', onClick: wipeData }, [h('span', { html: icon('trash', 15) }), 'Borrar todos mis datos'])
+      ])
     ])
   ]);
-  outlet.appendChild(card);
+  outlet.appendChild(grid);
 
   function loadSample() {
     const data = sampleData();
