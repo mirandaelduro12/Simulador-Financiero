@@ -1,40 +1,46 @@
 import { Storage } from '../storage.js';
-import { h, formatCurrency, formatDate, showToast } from '../utils.js';
+import { h, formatCurrency, formatDate, formatPercent, showToast, clamp } from '../utils.js';
 import { projectDebtPayoff } from '../calculations.js';
-import { buildTable, textField, readForm } from './shared.js';
+import { buildTable, textField, readForm, addButton, stackedCell, formHead, focusForm } from './shared.js';
 
 export function renderDebts(outlet) {
   let editingId = null;
 
   const tableWrap = h('div', {});
-  const detailWrap = h('div', { class: 'mt-16' });
+  const detailWrap = h('div', {});
   const formWrap = h('div', { class: 'form-panel' });
+  const subEl = h('div', { class: 'card-sub' });
 
   const card = h('div', { class: 'card' }, [
     h('div', { class: 'section-head' }, [
-      h('h3', {}, 'Deudas registradas'),
-      h('button', { class: 'btn btn-primary', onClick: () => { editingId = null; renderForm(); } }, '+ Nueva deuda')
+      h('div', {}, [h('h3', {}, 'Deudas registradas'), subEl]),
+      addButton('Nueva deuda', () => { editingId = null; renderForm(); })
     ]),
-    tableWrap,
-    formWrap
+    formWrap,
+    tableWrap
   ]);
   outlet.appendChild(card);
   outlet.appendChild(detailWrap);
 
   function renderTable() {
     const records = Storage.getAll('debts');
+    const balance = records.reduce((acc, d) => acc + (Number(d.remainingBalance) || 0), 0);
+    subEl.textContent = `${records.length} ${records.length === 1 ? 'deuda' : 'deudas'} · ${formatCurrency(balance)} pendientes`;
+
     clear(tableWrap);
     tableWrap.appendChild(buildTable({
       records,
       columns: [
-        { key: 'name', label: 'Deuda' },
+        { key: 'name', label: 'Deuda', render: r => stackedCell(r.name, r.startDate ? `desde ${formatDate(r.startDate)}` : null) },
         { key: 'remainingBalance', label: 'Saldo pendiente', numeric: true, render: r => formatCurrency(r.remainingBalance) },
         { key: 'interestRate', label: 'Tasa anual', numeric: true, render: r => `${r.interestRate}%` },
         { key: 'monthlyPayment', label: 'Cuota mensual', numeric: true, render: r => formatCurrency(r.monthlyPayment) },
         {
           key: 'payoff', label: 'Tiempo restante', render: r => {
             const p = projectDebtPayoff(r);
-            return p.feasible ? `${p.months} meses` : 'No se cubre con la cuota actual';
+            return p.feasible
+              ? h('span', { class: 'tag' }, `${p.months} meses`)
+              : h('span', { class: 'tag', style: 'background:var(--negative-soft);color:var(--negative)' }, 'No se cubre con la cuota actual');
           }
         }
       ],
@@ -52,16 +58,31 @@ export function renderDebts(outlet) {
 
     const cards = records.map(debt => {
       const p = projectDebtPayoff(debt);
-      return h('div', { class: 'card' }, [
-        h('div', { class: 'card-title' }, debt.name),
-        p.feasible ? h('div', { class: 'stack' }, [
-          statLine('Meses restantes', `${p.months}`),
-          statLine('Interés total a pagar', formatCurrency(p.totalInterest)),
-          statLine('Costo total de la deuda', formatCurrency(p.totalCost))
-        ]) : h('div', { class: 'alert negative' }, 'La cuota mensual no cubre ni el interés generado: esta deuda nunca se terminaría de pagar con las condiciones actuales.')
+      const initial = Number(debt.initialAmount) || Number(debt.remainingBalance) || 0;
+      const paidPct = initial > 0 ? clamp(((initial - debt.remainingBalance) / initial) * 100, 0, 100) : 0;
+
+      return h('div', { class: 'card debt-card' }, [
+        h('div', { class: 'spread' }, [
+          h('h4', {}, debt.name),
+          h('span', { class: 'tag accent' }, `${debt.interestRate}% anual`)
+        ]),
+        h('div', { class: 'big-figure' }, [formatCurrency(debt.remainingBalance)]),
+        h('div', { class: 'text-faint' }, 'saldo pendiente'),
+        h('div', { class: 'progress-track' }, [h('div', { class: 'progress-fill accent', style: `width:${paidPct}%` })]),
+        h('div', { class: 'spread text-faint' }, [
+          h('span', {}, `Pagado ${formatPercent(paidPct)}`),
+          h('span', {}, `de ${formatCurrency(initial)}`)
+        ]),
+        h('div', { class: 'note' }, [
+          p.feasible ? h('div', { class: 'stack' }, [
+            statLine('Meses restantes', `${p.months}`),
+            statLine('Interés total a pagar', formatCurrency(p.totalInterest)),
+            statLine('Costo total de la deuda', formatCurrency(p.totalCost))
+          ]) : h('div', { class: 'alert negative' }, 'La cuota mensual no cubre ni el interés generado: esta deuda nunca se terminaría de pagar con las condiciones actuales.')
+        ])
       ]);
     });
-    detailWrap.appendChild(h('div', { class: 'card-title mt-16' }, 'Proyección de cada deuda'));
+    detailWrap.appendChild(h('div', { class: 'section-label' }, 'Proyección de cada deuda'));
     detailWrap.appendChild(h('div', { class: 'grid-3' }, cards));
   }
 
@@ -71,6 +92,7 @@ export function renderDebts(outlet) {
 
   function renderForm(existing) {
     clear(formWrap);
+    formWrap.appendChild(formHead(existing ? 'Editar deuda' : 'Nueva deuda'));
     formWrap.appendChild(h('div', { class: 'form-row' }, [
       textField({ id: 'debt-name', label: 'Nombre de la deuda', value: existing?.name || '', required: true }),
       textField({ id: 'debt-initial', label: 'Monto inicial (S/)', type: 'number', step: '0.01', min: '0', value: existing?.initialAmount ?? '' }),
@@ -83,8 +105,9 @@ export function renderDebts(outlet) {
     formWrap.appendChild(errorBox);
     formWrap.appendChild(h('div', { class: 'row' }, [
       h('button', { class: 'btn btn-primary', onClick: () => handleSave(errorBox) }, existing ? 'Guardar cambios' : 'Agregar deuda'),
-      h('button', { class: 'btn', onClick: () => clear(formWrap) }, 'Cancelar')
+      h('button', { class: 'btn btn-ghost', onClick: () => clear(formWrap) }, 'Cancelar')
     ]));
+    focusForm(formWrap);
   }
 
   function handleSave(errorBox) {

@@ -1,17 +1,18 @@
 import { Storage } from '../storage.js';
 import { h, formatCurrency, formatDate, showToast, clamp } from '../utils.js';
-import { projectGoal, requiredContribution } from '../calculations.js';
-import { textField, readForm } from './shared.js';
+import { projectGoal } from '../calculations.js';
+import { textField, readForm, addButton, actionButtons, formHead, focusForm } from './shared.js';
 
 export function renderGoals(outlet) {
   let editingId = null;
   const listWrap = h('div', { class: 'grid-3' });
   const formWrap = h('div', { class: 'form-panel' });
+  const subEl = h('div', { class: 'card-sub' });
 
   const card = h('div', { class: 'card' }, [
-    h('div', { class: 'section-head' }, [
-      h('h3', {}, 'Objetivos financieros'),
-      h('button', { class: 'btn btn-primary', onClick: () => { editingId = null; renderForm(); } }, '+ Nuevo objetivo')
+    h('div', { class: 'section-head', style: 'margin-bottom:0' }, [
+      h('div', {}, [h('h3', {}, 'Objetivos financieros'), subEl]),
+      addButton('Nuevo objetivo', () => { editingId = null; renderForm(); })
     ]),
     formWrap
   ]);
@@ -20,28 +21,35 @@ export function renderGoals(outlet) {
 
   function renderList() {
     const goals = Storage.getAll('goals');
+    const saved = goals.reduce((acc, g) => acc + (Number(g.currentSaved) || 0), 0);
+    const target = goals.reduce((acc, g) => acc + (Number(g.targetAmount) || 0), 0);
+    subEl.textContent = goals.length
+      ? `${formatCurrency(saved)} ahorrados de ${formatCurrency(target)} en ${goals.length} ${goals.length === 1 ? 'meta' : 'metas'}`
+      : 'Define una meta y un aporte mensual';
+
     clear(listWrap);
     if (!goals.length) {
-      listWrap.appendChild(h('div', { class: 'card' }, [h('div', { class: 'empty-state' }, 'No tienes objetivos creados todavía.')]));
+      listWrap.appendChild(h('div', { class: 'card' }, [h('div', { class: 'empty-state' }, [h('p', {}, 'No tienes objetivos creados todavía.')])]));
       return;
     }
     goals.forEach(goal => {
       const p = projectGoal(goal);
       const pct = clamp(p.progressPct, 0, 100);
-      listWrap.appendChild(h('div', { class: 'card' }, [
+      listWrap.appendChild(h('div', { class: 'card goal-card' }, [
         h('div', { class: 'spread' }, [
           h('h4', {}, goal.name),
-          h('div', { class: 'table-actions' }, [
-            h('button', { class: 'btn btn-sm btn-icon', onClick: () => { editingId = goal.id; renderForm(goal); } }, '✎'),
-            h('button', { class: 'btn btn-sm btn-icon btn-danger', onClick: () => { Storage.remove('goals', goal.id); showToast('Objetivo eliminado', 'success'); renderList(); } }, '✕')
-          ])
+          actionButtons({
+            onEdit: () => { editingId = goal.id; renderForm(goal); },
+            onDelete: () => { Storage.remove('goals', goal.id); showToast('Objetivo eliminado', 'success'); renderList(); }
+          })
         ]),
-        h('div', { class: 'progress-track' }, [h('div', { class: 'progress-fill', style: `width:${pct}%` })]),
+        h('div', { class: 'goal-pct' }, [pct.toFixed(0), h('small', {}, '%')]),
+        h('div', { class: 'progress-track' }, [h('div', { class: `progress-fill ${pct >= 100 ? 'complete' : ''}`, style: `width:${pct}%` })]),
         h('div', { class: 'spread text-faint' }, [
-          h('span', {}, `${formatCurrency(goal.currentSaved)} de ${formatCurrency(goal.targetAmount)}`),
-          h('span', {}, `${pct.toFixed(0)}%`)
+          h('span', { class: 'mono' }, formatCurrency(goal.currentSaved)),
+          h('span', {}, `meta ${formatCurrency(goal.targetAmount)}`)
         ]),
-        h('div', { class: 'mt-16 stack' }, [
+        h('div', { class: 'note' }, [
           p.monthsLeft === Infinity
             ? h('div', { class: 'alert warning' }, 'Con un aporte mensual de S/ 0 no se alcanzará esta meta. Define un aporte mensual.')
             : h('div', { class: 'text-soft' }, `A ${formatCurrency(goal.monthlyContribution)}/mes: faltan ${p.monthsLeft} meses (${p.estimatedDate ? formatDate(p.estimatedDate) : '—'}).`)
@@ -52,6 +60,7 @@ export function renderGoals(outlet) {
 
   function renderForm(existing) {
     clear(formWrap);
+    formWrap.appendChild(formHead(existing ? 'Editar objetivo' : 'Nuevo objetivo'));
     formWrap.appendChild(h('div', { class: 'form-row' }, [
       textField({ id: 'goal-name', label: 'Nombre del objetivo', value: existing?.name || '', required: true }),
       textField({ id: 'goal-target', label: 'Meta (S/)', type: 'number', step: '0.01', min: '0', value: existing?.targetAmount ?? '', required: true }),
@@ -62,8 +71,9 @@ export function renderGoals(outlet) {
     formWrap.appendChild(errorBox);
     formWrap.appendChild(h('div', { class: 'row' }, [
       h('button', { class: 'btn btn-primary', onClick: () => handleSave(errorBox) }, existing ? 'Guardar cambios' : 'Crear objetivo'),
-      h('button', { class: 'btn', onClick: () => clear(formWrap) }, 'Cancelar')
+      h('button', { class: 'btn btn-ghost', onClick: () => clear(formWrap) }, 'Cancelar')
     ]));
+    focusForm(formWrap);
   }
 
   function handleSave(errorBox) {

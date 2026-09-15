@@ -8,58 +8,71 @@ import { renderScenarios } from './views/scenarios.js';
 import { renderPurchases } from './views/purchases.js';
 import { renderAnalytics } from './views/analytics.js';
 import { renderSettings } from './views/settings.js';
-import { Storage } from './storage.js';
+import { icon } from './icons.js';
 
-const NAV_ITEMS = [
-  { route: '/dashboard', label: 'Dashboard', icon: iconGrid() },
-  { route: '/income', label: 'Ingresos', icon: iconArrowDown() },
-  { route: '/expenses', label: 'Gastos', icon: iconArrowUp() },
-  { route: '/debts', label: 'Deudas', icon: iconCard() },
-  { route: '/goals', label: 'Objetivos', icon: iconFlag() },
-  { route: '/scenarios', label: 'Escenarios', icon: iconBranch() },
-  { route: '/purchases', label: 'Compras', icon: iconBag() },
-  { route: '/analytics', label: 'Análisis', icon: iconChart() },
-  { route: '/settings', label: 'Ajustes', icon: iconGear() }
+const THEME_KEY = 'simulador-financiero:theme';
+
+const NAV_GROUPS = [
+  { label: null, items: [
+    { route: '/dashboard', label: 'Dashboard', icon: 'grid' }
+  ] },
+  { label: 'Registro', items: [
+    { route: '/income', label: 'Ingresos', icon: 'income' },
+    { route: '/expenses', label: 'Gastos', icon: 'expense' },
+    { route: '/debts', label: 'Deudas', icon: 'card' },
+    { route: '/goals', label: 'Objetivos', icon: 'flag' }
+  ] },
+  { label: 'Simulación', items: [
+    { route: '/scenarios', label: 'Escenarios', icon: 'branch' },
+    { route: '/purchases', label: 'Compras', icon: 'bag' }
+  ] },
+  { label: 'Entender', items: [
+    { route: '/analytics', label: 'Análisis', icon: 'chart' },
+    { route: '/settings', label: 'Ajustes', icon: 'gear' }
+  ] }
 ];
 
 function buildShell() {
   const app = document.getElementById('app');
 
-  const nav = document.createElement('nav');
-  nav.className = 'nav';
-  NAV_ITEMS.forEach(item => {
-    const a = document.createElement('a');
-    a.className = 'nav-item';
-    a.href = `#${item.route}`;
-    a.dataset.route = item.route;
-    a.innerHTML = `${item.icon}<span>${item.label}</span>`;
-    nav.appendChild(a);
-  });
+  const navHtml = NAV_GROUPS.map(group => `
+    <div class="nav-group">
+      ${group.label ? `<div class="nav-label">${group.label}</div>` : ''}
+      ${group.items.map(item => `
+        <a class="nav-item" href="#${item.route}" data-route="${item.route}">${icon(item.icon, 17)}<span>${item.label}</span></a>
+      `).join('')}
+    </div>
+  `).join('');
 
   app.innerHTML = `
     <div class="app-shell">
       <aside class="sidebar">
-        <div class="brand">
-          <span class="brand-mark">SFP // v1</span>
-          <h1>Simulador Financiero</h1>
+        <a class="brand" href="#/dashboard" aria-label="Ir al Dashboard">
+          <span class="brand-logo">S/</span>
+          <span class="brand-text"><strong>Simulador</strong><span>Finanzas personales</span></span>
+        </a>
+        <nav class="nav" aria-label="Secciones">${navHtml}</nav>
+        <div class="sidebar-footer">
+          <span class="footer-note">Node + SQLite<br>Google Forms → API</span>
+          <button id="theme-toggle" class="theme-toggle" type="button"></button>
         </div>
       </aside>
       <div class="main">
         <header class="topbar">
           <div>
+            <div class="topbar-eyebrow">${currentMonthLabel()}</div>
             <h2>Dashboard</h2>
-            <div class="topbar-sub"></div><span id="connection-badge" class="connection-badge"></span><button id="sync-button" class="btn btn-sm sync-button" type="button">↻ Sincronizar</button>
+            <div class="topbar-sub"></div>
+          </div>
+          <div class="topbar-actions">
+            <span id="connection-badge" class="connection-badge"></span>
+            <button id="sync-button" class="btn btn-sm sync-button" type="button">${icon('refresh', 15)}<span>Sincronizar</span></button>
           </div>
         </header>
         <section class="view" id="view-outlet"></section>
       </div>
     </div>
   `;
-
-  app.querySelector('.sidebar').appendChild(nav);
-  app.querySelector('.sidebar').insertAdjacentHTML('beforeend', `
-    <div class="sidebar-footer">Full Stack · JS + Node + SQLite<br>Google Forms → API → Dashboard</div>
-  `);
 
   return {
     outlet: document.getElementById('view-outlet'),
@@ -84,19 +97,56 @@ function setTitle(title, sub) {
   document.querySelector('.topbar-sub').textContent = sub;
 }
 
+function currentMonthLabel() {
+  const label = new Date().toLocaleDateString('es-PE', { month: 'long', year: 'numeric' });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+// ---- Tema claro / oscuro ----
+function effectiveTheme() {
+  const explicit = document.documentElement.dataset.theme;
+  if (explicit) return explicit;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function paintThemeToggle() {
+  const button = document.getElementById('theme-toggle');
+  const dark = effectiveTheme() === 'dark';
+  button.innerHTML = icon(dark ? 'sun' : 'moon', 16);
+  button.title = dark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro';
+  button.setAttribute('aria-label', button.title);
+}
+
+function setupThemeToggle() {
+  paintThemeToggle();
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem(THEME_KEY, next); } catch { /* sin almacenamiento disponible */ }
+    paintThemeToggle();
+    refreshCurrent(); // repinta los gráficos con la paleta del nuevo tema
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const { outlet, topbar } = buildShell();
   registerRoutes();
+  setupThemeToggle();
+
   document.getElementById('sync-button').addEventListener('click', async (event) => {
     const button = event.currentTarget;
+    const label = button.querySelector('span');
     button.disabled = true;
-    button.textContent = '↻ Sincronizando...';
+    button.classList.add('is-syncing');
+    label.textContent = 'Sincronizando…';
     const status = await StorageInit();
     updateConnectionStatus(status.online);
     button.disabled = false;
-    button.textContent = '↻ Sincronizar';
+    button.classList.remove('is-syncing');
+    label.textContent = 'Sincronizar';
     refreshCurrent();
   });
+
   const status = await StorageInit();
   updateConnectionStatus(status.online);
   startRouter(outlet, topbar);
@@ -107,21 +157,11 @@ async function StorageInit() {
   const mod = await import('./storage.js');
   return mod.Storage.init();
 }
+
 function updateConnectionStatus(online) {
   const badge = document.getElementById('connection-badge');
   if (!badge) return;
   badge.className = `connection-badge ${online ? 'online' : 'offline'}`;
-  badge.textContent = online ? '● Sincronizado' : '● Modo local';
+  badge.textContent = online ? 'Sincronizado' : 'Modo local';
   badge.title = online ? 'Datos sincronizados con la API' : 'La API no está disponible; se usa el caché del navegador';
 }
-
-// ---- Iconos SVG inline (sin dependencias externas) ----
-function iconGrid() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`; }
-function iconArrowDown() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16M6 14l6 6 6-6"/></svg>`; }
-function iconArrowUp() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V4M6 10l6-6 6 6"/></svg>`; }
-function iconCard() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>`; }
-function iconFlag() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V4h14l-3 4 3 4H4"/></svg>`; }
-function iconBranch() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7M8.3 6H15c1.7 0 3 1.3 3 3v.5"/></svg>`; }
-function iconBag() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8h12l-1 12H7L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>`; }
-function iconChart() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>`; }
-function iconGear() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z"/></svg>`; }
